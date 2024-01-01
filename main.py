@@ -1,4 +1,4 @@
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, status
 from pydantic import BaseModel
 from typing import List, Annotated, Optional
 import models
@@ -18,11 +18,11 @@ class Employee(BaseModel):
     lastName: str
     firstName: str
     department: str
-    dateCreated: Optional[datetime]
-    checkIns: Optional[datetime]
-    checkOuts: Optional[datetime]
-    timeDifference: Optional[float]
-    comments: Optional[str]
+    dateCreated: Optional[datetime] = None
+    checkIns: Optional[datetime] = None
+    checkOuts: Optional[datetime] = None
+    timeDifference: Optional[float] = None
+    comments: Optional[str] = None
 
 def get_db():
     db = session_local()
@@ -34,11 +34,21 @@ def get_db():
 db_dependency = Annotated[Session, Depends(get_db)]
 
 @app.post("/employee/")
-async def create_employee(new_employee : Employee, db : db_dependency):
-    db_employee = models.Employee(lastName = new_employee.lastName,
-                                  firstName = new_employee.firstName,
-                                  department = new_employee.department,
-                                  )
-    db.add(db_employee)
-    db.commit()
-    db.refresh(db_employee)
+async def create_employee(new_employee: Employee, db: Session = Depends(get_db)):
+    try:
+        db_employee = models.Employee(
+            lastName=new_employee.lastName,
+            firstName=new_employee.firstName,
+            department=new_employee.department,
+        )
+        db.add(db_employee)
+        db.commit()
+        db.refresh(db_employee)
+        return db_employee
+    except Exception as e:
+        db.rollback()
+        print(f"Error during database operation: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error",
+        ) from e
